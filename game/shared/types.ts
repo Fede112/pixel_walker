@@ -8,7 +8,10 @@ export interface Player {
 }
 
 export interface ServerToClientEvents {
-  players: (players: Player[]) => void;
+  'player:new': (player: Player) => void;
+  'player:update': (id: string, x: number, y: number) => void;
+  'player:remove': (id: string) => void;
+  'self': (id: string) => void;
 }
 
 export interface ClientToServerEvents {

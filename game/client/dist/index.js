@@ -11,7 +11,7 @@ app.ticker.add(() => {
     app.stage.removeChildren();
     for (const player of players) {
         const g = new PIXI.Graphics();
-        g.beginFill(PIXI.utils.string2hex(player.color));
+        g.beginFill(new PIXI.Color(player.color).toNumber());
         g.drawCircle(player.x, player.y, 15);
         g.endFill();
         app.stage.addChild(g);
