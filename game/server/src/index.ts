@@ -1,7 +1,16 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { Player, ServerToClientEvents, ClientToServerEvents } from 'shared/types';
+import { Player, ServerToClientEvents, ClientToServerEvents, GameConfig } from 'shared/types';
+
+const CONFIG: GameConfig = {
+  TILE_SIZE: 32,
+  WORLD_WIDTH: 100,    // Large world: 100x100 tiles
+  WORLD_HEIGHT: 100,
+  VIEWPORT_WIDTH: 25,  // Visible area: 25x19 tiles
+  VIEWPORT_HEIGHT: 19,
+  MOVE_SPEED: 0.1 // tiles per frame (consistent with client)
+};
 
 
 import path from 'path';
@@ -22,6 +31,7 @@ app.use(express.static(clientDist));
 const players: Record<string, Player> = {};
 
 io.on('connection', (socket) => {
+  console.log(`Player ${socket.id} connected`);
   const color = `hsl(${Math.floor(Math.random() * 360)}, 80%, 60%)`;
 
   // Send existing players to new client
@@ -29,24 +39,46 @@ io.on('connection', (socket) => {
     socket.emit('player:new', player);
   }
 
-  // New player joins
-  players[socket.id] = { id: socket.id, x: 100, y: 100, color };
-  io.emit('player:new', players[socket.id]);
+  // Create new player - spawn at center of world (using decimal coordinates)
+  const startX = Math.floor(CONFIG.WORLD_WIDTH / 2) + 0.5; // Center of tile
+  const startY = Math.floor(CONFIG.WORLD_HEIGHT / 2) + 0.5;
+  const newPlayer: Player = { 
+    id: socket.id, 
+    x: startX, 
+    y: startY, 
+    color 
+  };
+  
+  // Add to players list
+  players[socket.id] = newPlayer;
+  
+  // Tell the new client who they are
   socket.emit('self', socket.id);
+  
+  // Broadcast new player to ALL clients (including the new one)
+  io.emit('player:new', newPlayer);
+  
+  console.log(`Player ${socket.id} spawned at (${startX}, ${startY}) with color ${color}`);
 
+  socket.on('move', (deltaX, deltaY) => {
+    const player = players[socket.id];
+    if (!player) return;
 
-  socket.on('move', (x, y) => {
-    if (players[socket.id]) {
-      players[socket.id].x = x;
-      players[socket.id].y = y;
-    socket.broadcast.emit('player:update', socket.id, x, y);
-    }
+    // Apply movement with bounds checking for the world
+    const newX = Math.max(0.1, Math.min(CONFIG.WORLD_WIDTH - 0.1, player.x + deltaX));
+    const newY = Math.max(0.1, Math.min(CONFIG.WORLD_HEIGHT - 0.1, player.y + deltaY));
+    
+    player.x = newX;
+    player.y = newY;
+    
+    socket.broadcast.emit('player:update', player);
   });
 
 
   socket.on('disconnect', () => {
+    console.log(`Player ${socket.id} disconnected`);
     delete players[socket.id];
-  io.emit('player:remove', socket.id);
+    io.emit('player:remove', socket.id);
   });
 });
 
