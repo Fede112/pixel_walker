@@ -1,6 +1,8 @@
 import * as PIXI from 'pixi.js';
 import { io } from 'socket.io-client';
 import type { Player, GameConfig } from 'shared/types';
+import './reset.css';
+import './style.css';
 
 const CONFIG: GameConfig = {
   TILE_SIZE: 32,
@@ -18,8 +20,9 @@ class PlayerSprite {
 
   constructor(public id: string, public color: string, startX: number, startY: number) {
     this.gfx = new PIXI.Graphics();
-    this.gfx.beginFill(PIXI.utils.string2hex(color));
-    this.gfx.drawRect(-CONFIG.TILE_SIZE / 2, -CONFIG.TILE_SIZE / 2, CONFIG.TILE_SIZE - 4, CONFIG.TILE_SIZE - 4);
+    this.gfx.beginFill(new PIXI.Color(color).toRgbaString());
+    // this.gfx.drawRect(-CONFIG.TILE_SIZE / 2, -CONFIG.TILE_SIZE / 2, CONFIG.TILE_SIZE - 4, CONFIG.TILE_SIZE - 4);
+    this.gfx.drawCircle(0, 0, CONFIG.TILE_SIZE / 4);
     this.gfx.endFill();
     
     this.x = startX;
@@ -64,7 +67,7 @@ class Game {
     this.app = new PIXI.Application({ 
       width: CONFIG.VIEWPORT_WIDTH * CONFIG.TILE_SIZE, 
       height: CONFIG.VIEWPORT_HEIGHT * CONFIG.TILE_SIZE, 
-      backgroundColor: 0x228B22 
+      backgroundColor: 0xdddddd
     });
     document.body.appendChild(this.app.view as HTMLCanvasElement);
 
@@ -105,7 +108,7 @@ class Game {
 
   private drawGrid() {
     const gridGraphics = new PIXI.Graphics();
-    gridGraphics.lineStyle(1, 0x404040, 0.3);
+    gridGraphics.lineStyle(1, 0x404040, 0.05);
     
     // Draw grid for the entire world
     for (let x = 0; x <= CONFIG.WORLD_WIDTH; x++) {
