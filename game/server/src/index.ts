@@ -32,7 +32,7 @@ const players: Record<string, Player> = {};
 
 io.on('connection', (socket) => {
   console.log(`Player ${socket.id} connected`);
-  const color = `hsl(${Math.floor(Math.random() * 360)}, 80%, 60%)`;
+  const color = `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`;
 
   // Send existing players to new client
   for (const player of Object.values(players)) {
