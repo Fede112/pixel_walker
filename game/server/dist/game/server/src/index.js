@@ -24,6 +24,10 @@ app.use(express.static(clientDist));
 const GRID_W = Math.ceil(CONFIG.WORLD_WIDTH / CONFIG.TILE);
 const GRID_H = Math.ceil(CONFIG.WORLD_HEIGHT / CONFIG.TILE);
 const INTERACT_RADIUS = 10; // pixels
+const BASE_W = 12; // must mirror client character width
+const BASE_H = 18; // client character height
+const SPRITE_SCALE = 1; // keep in sync with client
+const FOOT_H = 6; // collision height near feet (same as client)
 // terrain: 0 land, 1 water
 const terrain = new Uint8Array(GRID_W * GRID_H);
 const props = new Map();
@@ -42,6 +46,52 @@ function wrand() {
     return ((worldSeed >>> 0) / 4294967296);
 }
 function tIndex(tx, ty) { return ty * GRID_W + tx; }
+function worldToTile(x, y) {
+    return {
+        tx: Math.max(0, Math.min(GRID_W - 1, Math.floor(x / CONFIG.TILE))),
+        ty: Math.max(0, Math.min(GRID_H - 1, Math.floor(y / CONFIG.TILE)))
+    };
+}
+function hasBridgeAtTile(tx, ty) {
+    // Fast check via tile-key map
+    return bridgeByTile.has(`${tx},${ty}`);
+}
+function hasWallAtTile(tx, ty) {
+    return wallByTile.has(`${tx},${ty}`);
+}
+function rectOverlapsWall(x, y) {
+    const width = BASE_W * SPRITE_SCALE;
+    const halfW = width / 2;
+    const x1 = Math.floor((x - halfW) / CONFIG.TILE);
+    const y1 = Math.floor((y - FOOT_H) / CONFIG.TILE);
+    const x2 = Math.floor((x + halfW - 1) / CONFIG.TILE);
+    const y2 = Math.floor((y - 1) / CONFIG.TILE);
+    const minTX = Math.max(0, x1);
+    const minTY = Math.max(0, y1);
+    const maxTX = Math.min(GRID_W - 1, x2);
+    const maxTY = Math.min(GRID_H - 1, y2);
+    for (let ty = minTY; ty <= maxTY; ty++) {
+        for (let tx = minTX; tx <= maxTX; tx++) {
+            if (hasWallAtTile(tx, ty))
+                return true;
+        }
+    }
+    return false;
+}
+function isWaterAt(x, y) {
+    const { tx, ty } = worldToTile(x, y);
+    return terrain[tIndex(tx, ty)] === 1;
+}
+function isWalkableAt(x, y) {
+    if (rectOverlapsWall(x, y))
+        return false;
+    const { tx, ty } = worldToTile(x, y);
+    // Water must have a bridge to be walkable
+    const water = terrain[tIndex(tx, ty)] === 1;
+    if (water && !hasBridgeAtTile(tx, ty))
+        return false;
+    return true;
+}
 function generateRivers() {
     terrain.fill(0);
     const rivers = 2 + Math.floor(wrand() * 2);
@@ -145,12 +195,15 @@ io.on('connection', (socket) => {
         const player = players[socket.id];
         if (!player)
             return;
-        // Apply movement with bounds checking for the world
-        const newX = Math.max(0.1, Math.min(CONFIG.WORLD_WIDTH - 0.1, player.x + deltaX));
-        const newY = Math.max(0.1, Math.min(CONFIG.WORLD_HEIGHT - 0.1, player.y + deltaY));
-        player.x = newX;
-        player.y = newY;
-        socket.broadcast.emit('player:update', player);
+        // Apply movement with server-side collision (authoritative)
+        // Per-axis resolution to match client behavior
+        const tryX = Math.max(0.1, Math.min(CONFIG.WORLD_WIDTH - 0.1, player.x + deltaX));
+        if (isWalkableAt(tryX, player.y))
+            player.x = tryX;
+        const tryY = Math.max(0.1, Math.min(CONFIG.WORLD_HEIGHT - 0.1, player.y + deltaY));
+        if (isWalkableAt(player.x, tryY))
+            player.y = tryY;
+        io.emit('player:update', player);
     });
     // ----- World actions -----
     socket.on('prop:pickup', (propId) => {
@@ -187,6 +240,33 @@ io.on('connection', (socket) => {
             return;
         if (terrain[tIndex(tx, ty)] !== 0)
             return; // only on land
+        // Eject placing player if they are currently on this tile to avoid trapping
+        const pl = players[socket.id];
+        if (pl) {
+            const here = worldToTile(pl.x, pl.y);
+            if (here.tx === tx && here.ty === ty) {
+                // Try to move the player to a safe neighboring tile before placing the wall
+                const dirs = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }]; // up, down, left, right
+                let moved = false;
+                for (const d of dirs) {
+                    const ntx = tx + d.dx;
+                    const nty = ty + d.dy;
+                    if (ntx < 0 || nty < 0 || ntx >= GRID_W || nty >= GRID_H)
+                        continue;
+                    const cx = ntx * CONFIG.TILE + CONFIG.TILE / 2;
+                    const cy = (nty + 1) * CONFIG.TILE; // feet center (tile bottom)
+                    if (isWalkableAt(cx, cy)) {
+                        pl.x = cx;
+                        pl.y = cy;
+                        moved = true;
+                        break;
+                    }
+                }
+                if (!moved)
+                    return; // do not place if we cannot safely eject
+                io.emit('player:update', pl);
+            }
+        }
         const id = genId('w');
         const item = { id, tx, ty, by: socket.id };
         walls.set(id, item);
@@ -224,9 +304,7 @@ io.on('connection', (socket) => {
         io.emit('player:remove', socket.id);
     });
 });
-// API routes
-import { pixelArtRouter } from './routes/pixelart';
-app.use('/api/pixelart', pixelArtRouter);
+// API routes (none for now; pixelgen disabled)
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);

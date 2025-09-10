@@ -49,8 +49,14 @@ const wallsLayer = new PIXI.Container(); // id -> graphics
 const propsLayer = new PIXI.Container(); // id -> graphics
 const playersLayer = new PIXI.Container();
 const uiContainer = new PIXI.Container();
+const tileHighlight = new PIXI.Graphics();
+// Smoothly animated tile highlight position (world coords)
+let thInited = false;
+let thX = 0;
+let thY = 0;
+const bridgeTargetHighlight = new PIXI.Graphics();
 
-worldContainer.addChild(terrainLayer, bridgesLayer, wallsLayer, propsLayer, playersLayer);
+worldContainer.addChild(terrainLayer, bridgesLayer, wallsLayer, propsLayer, playersLayer, tileHighlight, bridgeTargetHighlight);
 app.stage.addChild(uiContainer);
 
 // ===== Socket.io =====
@@ -91,6 +97,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'e' || e.key === 'E') { e.preventDefault(); interact(); }
   if (e.key === '1') activeSlot = 0;
   if (e.key === '2') activeSlot = 1;
+  if (e.key === 'c' || e.key === 'C') { e.preventDefault(); if (tryCraft()) renderHUD(); }
 });
 
 function interact() {
@@ -105,7 +112,10 @@ function interact() {
     return;
   }
   if (item.type === 'plank') {
-    const { tx, ty } = worldToTile(pointInFront(player.face, CONFIG.TILE));
+    // Place on the adjacent tile in facing direction
+    const here = worldToTile({ x: player.x, y: player.y });
+    let tx = here.tx, ty = here.ty;
+    if (player.face === 'left') tx -= 1; else if (player.face === 'right') tx += 1; else if (player.face === 'up') ty -= 1; else ty += 1;
     socket.emit('bridge:place', tx, ty);
     return;
   }
@@ -117,6 +127,24 @@ function interact() {
   // Drop any other item in front
   const pt = pointInFront(player.face, Math.floor(CONFIG.TILE / 2));
   socket.emit('prop:drop', item.type, Math.round(pt.x), Math.round(pt.y));
+}
+
+// ----- Crafting (client-local inventory combine) -----
+const RECIPES: Record<string, { output: PropType }> = {
+  'bush+bush': { output: 'plank' },
+  'rock+rock': { output: 'wall' },
+};
+function craftKey(a: PropType, b: PropType) { return [a, b].sort().join('+'); }
+function tryCraft() {
+  const a = inventory[0]; const b = inventory[1];
+  if (!a || !b) return false;
+  const r = RECIPES[craftKey(a.type, b.type)];
+  if (!r) return false;
+  inventory[0] = null; inventory[1] = null;
+  // put result into first free slot
+  const res: InvProp = { type: r.output };
+  if (!inventory[0]) inventory[0] = res; else inventory[1] = res;
+  return true;
 }
 
 // World helpers
@@ -173,7 +201,14 @@ socket.on('player:new', (p: Player) => {
   }
   addRemote(p);
 });
-socket.on('player:update', (p: Player) => { if (p.id === selfId) return; updateRemote(p); });
+socket.on('player:update', (p: Player) => {
+  if (p.id === selfId) {
+    // Server-authoritative correction (e.g., new walls/bridges)
+    player.x = p.x; player.y = p.y;
+    return;
+  }
+  updateRemote(p);
+});
 socket.on('player:remove', (id: string) => removeRemote(id));
 
 function addRemote(p: Player) {
@@ -207,7 +242,7 @@ socket.on('prop:removed', ({ id, type, by }) => {
   }
 });
 socket.on('prop:added', ({ id, type, x, y, by }) => {
-  const p: SProp = { id, type, x, y } as any;
+  const p: SProp = { id, type, x, y };
   props.set(id, p);
   addPropSprite(p);
   if (by === selfId && inventory[activeSlot]?.type === type) { inventory[activeSlot] = null; renderHUD(); }
@@ -288,6 +323,8 @@ function update() {
   updateCamera();
   drawSelf();
   updateRemotesAnimation();
+  drawTileHighlight();
+  drawBridgeTargetHighlight();
 }
 
 function updateCamera() { let x = Math.round(player.x - LOGICAL_WIDTH / 2); let y = Math.round(player.y - LOGICAL_HEIGHT / 2); x = clamp(x, 0, Math.max(0, CONFIG.WORLD_WIDTH - LOGICAL_WIDTH)); y = clamp(y, 0, Math.max(0, CONFIG.WORLD_HEIGHT - LOGICAL_HEIGHT)); worldContainer.x = -x; worldContainer.y = -y; }
@@ -328,6 +365,50 @@ function updateRemotesAnimation() {
   }
 }
 
+function drawTileHighlight() {
+  // Compute target tile under player's feet
+  const tx = Math.max(0, Math.min(GRID_W - 1, Math.floor(player.x / CONFIG.TILE)));
+  const ty = Math.max(0, Math.min(GRID_H - 1, Math.floor(player.y / CONFIG.TILE)));
+  const targetX = tx * CONFIG.TILE;
+  const targetY = ty * CONFIG.TILE;
+
+  // Initialize on first frame
+  if (!thInited) { thX = targetX; thY = targetY; thInited = true; }
+
+  // Lerp toward the target for smoother visual motion
+  const dt = app.ticker.deltaMS / 16.67; // ~1 at 60fps
+  const k = Math.min(1, 0.12 * dt);      // smoothing factor (lower = smoother)
+  thX += (targetX - thX) * k;
+  thY += (targetY - thY) * k;
+
+  tileHighlight.clear();
+  tileHighlight.lineStyle(1, 0x222222, 0.8);
+  tileHighlight.beginFill(0xffff00, 0.12);
+  tileHighlight.drawRect(Math.round(thX), Math.round(thY), CONFIG.TILE, CONFIG.TILE);
+  tileHighlight.endFill();
+}
+
+function drawBridgeTargetHighlight() {
+  bridgeTargetHighlight.clear();
+  const it = inventory[activeSlot];
+  if (!it || it.type !== 'plank') return;
+  // Adjacent tile in facing direction
+  const here = worldToTile({ x: player.x, y: player.y });
+  let tx = here.tx, ty = here.ty;
+  if (player.face === 'left') tx -= 1; else if (player.face === 'right') tx += 1; else if (player.face === 'up') ty -= 1; else ty += 1;
+  if (tx < 0 || ty < 0 || tx >= GRID_W || ty >= GRID_H) return;
+  const idx = tIndex(tx, ty);
+  const isWater = terrain[idx] === 1;
+  // Check if a bridge already exists on that tile
+  let exists = false; for (const b of bridges.values()) { if (b.tx === tx && b.ty === ty) { exists = true; break; } }
+  const valid = isWater && !exists;
+  const x = tx * CONFIG.TILE; const y = ty * CONFIG.TILE;
+  bridgeTargetHighlight.lineStyle(1, valid ? 0x2e7d32 : 0xb71c1c, 0.9);
+  bridgeTargetHighlight.beginFill(valid ? 0x66bb6a : 0xef9a9a, 0.18);
+  bridgeTargetHighlight.drawRect(x, y, CONFIG.TILE, CONFIG.TILE);
+  bridgeTargetHighlight.endFill();
+}
+
 // Draw a silhouette at local origin (0,0) as feet center for remote players
 function drawManGraphic(g: PIXI.Graphics, color: string, stepIndex: number) {
   g.clear();
@@ -335,7 +416,7 @@ function drawManGraphic(g: PIXI.Graphics, color: string, stepIndex: number) {
   const cx = Math.floor(BASE_W / 2);
   const left = -Math.round(player.width / 2);
   const top = -Math.round(player.height);
-  const fillNum = (PIXI as any).Color?.fromCssColorString ? (PIXI as any).Color.fromCssColorString(color).toNumber() : 0x111111;
+  const fillNum = cssColorToHex(color);
   g.beginFill(fillNum);
   g.drawRect(left + cx - 2, top + 0, 4, 4);
   g.drawRect(left + cx - 1, top + 4, 2, 1);
@@ -346,6 +427,30 @@ function drawManGraphic(g: PIXI.Graphics, color: string, stepIndex: number) {
   g.drawRect(left + cx - 3 + swing, top + 12, 2, 6);
   g.drawRect(left + cx + 1 - swing, top + 12, 2, 6);
   g.endFill();
+}
+
+// Convert CSS color string to numeric hex
+function cssColorToHex(color: string): number {
+  // Hex format
+  if (/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)) {
+    let hex = color.substring(1);
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    return parseInt(hex, 16);
+  }
+  // rgb/rgba
+  const rgbMatch = color.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (rgbMatch) {
+    const [, r, g, b] = rgbMatch as any;
+    return (parseInt(r) << 16) + (parseInt(g) << 8) + parseInt(b);
+  }
+  // Named colors fallback via canvas
+  const ctx = document.createElement('canvas').getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = color as any;
+    const val = ctx.fillStyle as unknown as string;
+    if (typeof val === 'string' && val.startsWith('#')) return parseInt(val.slice(1), 16) || 0x111111;
+  }
+  return 0x111111;
 }
 
 // ===== HUD (inventory) =====
