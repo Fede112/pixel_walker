@@ -69,6 +69,7 @@ class Game {
       height: CONFIG.VIEWPORT_HEIGHT * CONFIG.TILE_SIZE, 
       backgroundColor: 0xdddddd
     });
+    globalThis.__PIXI_APP__ = this.app;
     document.body.appendChild(this.app.view as HTMLCanvasElement);
 
     // World container holds all game objects and can be moved for camera
