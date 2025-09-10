@@ -1,0 +1,15 @@
+{
+  "name": "pixel_walker",
+  "private": true,
+  "workspaces": [
+    "game/server",
+    "game/client",
+    "game/shared"
+  ],
+  "scripts": {
+  "dev": "pnpm -r run dev",
+  "build": "pnpm -r run build",
+  "start": "pnpm -r run start",
+  "install:all": "pnpm install --filter ./game/server... && pnpm install --filter ./game/client..."
+  }
+}

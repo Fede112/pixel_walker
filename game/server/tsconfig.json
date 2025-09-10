@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+  "outDir": "dist",
+  "rootDir": "../../",
+    "baseUrl": "../../",
+    "paths": {
+      "shared/*": ["game/shared/*"]
+    }
+  },
+  "include": ["src", "../shared/types.ts"]
+}

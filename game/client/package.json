@@ -1,0 +1,22 @@
+{
+  "name": "pixel_walker-client",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+  "dev": "vite",
+  "start": "vite preview",
+  "build": "vite build"
+  },
+  "dependencies": {
+    "pixi.js": "^7.2.4",
+    "socket.io-client": "^4.7.5"
+  },
+  "devDependencies": {
+    "serve": "^14.2.5",
+    "ts-node-dev": "^2.0.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.0.0",
+    "vite": "^7.1.5"
+  }
+}
