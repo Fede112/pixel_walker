@@ -4,7 +4,7 @@
 
 - `game/server/` — Node.js + socket.io server (TypeScript)
   - `src/index.ts` — Main server entry point
-- `game/client/` — PixiJS browser client (TypeScript, Vite)
+- `game/client/` — Canvas browser client (TypeScript, Vite)
   - `src/index.ts` — Main client entry point
   - `src/index.html` — Main HTML file
 - `game/shared/` — Shared TypeScript types
@@ -40,3 +40,10 @@ This will run on both client and server
 
 ---
 Keep it simple. Edit code in `src/` folders and shared types in `shared/types.ts`.
+
+## Controls
+
+- Arrow keys: move
+- E: grab/place
+- 1/2: switch active slot
+- C: craft (combine two items)
