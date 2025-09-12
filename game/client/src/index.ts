@@ -10,16 +10,6 @@ const LOGICAL_HEIGHT = 108;
 const SPRITE_SCALE = 1;
 const INTERACT_RADIUS = 10;
 
-// DOM overlay handling
-const overlayEl = document.getElementById('overlay');
-function hideOverlay() { overlayEl?.classList.add('hidden'); }
-function overlayVisible() { return !!overlayEl && !overlayEl.classList.contains('hidden'); }
-overlayEl?.addEventListener('click', hideOverlay);
-window.addEventListener('keydown', (e) => {
-  if (!overlayVisible()) return;
-  if (['Enter', ' ', 'Space', 'Escape', 'Esc'].includes(e.key) || e.key.startsWith('Arrow')) { e.preventDefault(); hideOverlay(); }
-});
-
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 // Resize CSS size but keep logical pixel buffer
 function resize() {
@@ -50,10 +40,10 @@ const propsLayer = new PIXI.Container(); // id -> graphics
 const playersLayer = new PIXI.Container();
 const uiContainer = new PIXI.Container();
 const tileHighlight = new PIXI.Graphics();
-// Smoothly animated tile highlight position (world coords)
-let thInited = false;
-let thX = 0;
-let thY = 0;
+// Remove the smooth animation variables since we're doing direct highlighting
+// let thInited = false;
+// let thX = 0;
+// let thY = 0;
 const bridgeTargetHighlight = new PIXI.Graphics();
 
 worldContainer.addChild(terrainLayer, bridgesLayer, wallsLayer, propsLayer, playersLayer, tileHighlight, bridgeTargetHighlight);
@@ -80,7 +70,7 @@ const remotes = new Map<string, RemoteEntity>();
 // Player local
 type Facing = 'up' | 'down' | 'left' | 'right';
 const BASE_W = 12; const BASE_H = 18;
-const player = { x: 100, y: 100, speed: 60, width: BASE_W * SPRITE_SCALE, height: BASE_H * SPRITE_SCALE, face: 'down' as Facing, stepTime: 0, stepIndex: 0 };
+const player = { x: 100, y: 100, speed: 60, width: BASE_W * SPRITE_SCALE, height: BASE_H * SPRITE_SCALE, face: 'down' as Facing, stepTime: 0, stepIndex: 0, color: '#111111' };
 
 // Inventory (client-side only)
 type InvProp = { id?: string; type: PropType };
@@ -89,7 +79,10 @@ let activeSlot = 0;
 
 // Keys
 const keys = new Set<string>();
-window.addEventListener('keydown', (e) => { if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," ","Space"].includes(e.key)) e.preventDefault(); keys.add(e.key); });
+window.addEventListener('keydown', (e) => { 
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," ","Space","w","W","a","A","s","S","d","D"].includes(e.key)) e.preventDefault(); 
+  keys.add(e.key); 
+});
 window.addEventListener('keyup', (e) => keys.delete(e.key));
 
 // Interact keys
@@ -196,6 +189,7 @@ socket.on('player:new', (p: Player) => {
     // Align local player with server-authoritative spawn
     player.x = p.x;
     player.y = p.y;
+    player.color = p.color || '#111111'; // Store the player's color
     updateCamera();
     return;
   }
@@ -307,12 +301,29 @@ function nearestProp(x: number, y: number, radius: number) { let best: SProp | n
 // Movement + camera
 app.ticker.add(() => update());
 function update() {
-  let dx = 0, dy = 0; if (keys.has('ArrowLeft')) dx -= 1; if (keys.has('ArrowRight')) dx += 1; if (keys.has('ArrowUp')) dy -= 1; if (keys.has('ArrowDown')) dy += 1;
+  let dx = 0, dy = 0; 
+  if (keys.has('ArrowLeft') || keys.has('a') || keys.has('A')) dx -= 1; 
+  if (keys.has('ArrowRight') || keys.has('d') || keys.has('D')) dx += 1; 
+  if (keys.has('ArrowUp') || keys.has('w') || keys.has('W')) dy -= 1; 
+  if (keys.has('ArrowDown') || keys.has('s') || keys.has('S')) dy += 1;
   const moving = dx !== 0 || dy !== 0; let stepX = 0, stepY = 0;
   if (moving) {
     const len = Math.hypot(dx, dy) || 1; dx/=len; dy/=len; stepX = dx * player.speed * app.ticker.deltaMS / 1000; stepY = dy * player.speed * app.ticker.deltaMS / 1000;
-    const tryX = clamp(player.x + stepX, 0, CONFIG.WORLD_WIDTH); if (isWalkableAt(tryX, player.y)) player.x = tryX;
-    const tryY = clamp(player.y + stepY, 0, CONFIG.WORLD_HEIGHT); if (isWalkableAt(player.x, tryY)) player.y = tryY;
+    
+    // Try diagonal movement first
+    const tryX = clamp(player.x + stepX, 0, CONFIG.WORLD_WIDTH);
+    const tryY = clamp(player.y + stepY, 0, CONFIG.WORLD_HEIGHT);
+    
+    if (isWalkableAt(tryX, tryY)) {
+      // Diagonal movement is clear
+      player.x = tryX;
+      player.y = tryY;
+    } else {
+      // Diagonal blocked, try individual axes
+      if (isWalkableAt(tryX, player.y)) player.x = tryX;
+      if (isWalkableAt(player.x, tryY)) player.y = tryY;
+    }
+    
     if (Math.abs(dx) > Math.abs(dy)) player.face = dx > 0 ? 'right' : 'left'; else if (Math.abs(dy) > 0) player.face = dy > 0 ? 'down' : 'up';
     player.stepTime += app.ticker.deltaMS/1000; const frameDur = 1/8; if (player.stepTime >= frameDur) { player.stepTime -= frameDur; player.stepIndex = player.stepIndex === 1 ? 2 : 1; }
   } else { player.stepTime = 0; player.stepIndex = 0; }
@@ -334,9 +345,12 @@ function clamp(v: number, a: number, b: number) { return Math.max(a, Math.min(b,
 const selfG = new PIXI.Graphics(); playersLayer.addChild(selfG);
 function drawSelf() {
   const sx = player.x, sy = player.y; const swing = player.stepIndex === 0 ? 0 : (player.stepIndex === 1 ? -1 : 1);
-  selfG.clear(); selfG.beginFill(0x111111);
-  const cx = Math.floor(BASE_W / 2); const left = Math.round(sx - player.width / 2); const top = Math.round(sy - player.height);
-  // Translate via matrix: simply draw at world coords
+  selfG.clear(); 
+  const fillNum = cssColorToHex(player.color);
+  selfG.beginFill(fillNum);
+  const cx = Math.floor(BASE_W / 2); 
+  const left = Math.round(sx - BASE_W / 2); // Center horizontally on player.x
+  const top = Math.round(sy - BASE_H); // Position so feet are at player.y
   // Head
   selfG.drawRect(left + cx - 2, top + 0, 4, 4);
   selfG.drawRect(left + cx - 1, top + 4, 2, 1);
@@ -366,25 +380,17 @@ function updateRemotesAnimation() {
 }
 
 function drawTileHighlight() {
-  // Compute target tile under player's feet
+  // Get the tile the player is currently on
   const tx = Math.max(0, Math.min(GRID_W - 1, Math.floor(player.x / CONFIG.TILE)));
   const ty = Math.max(0, Math.min(GRID_H - 1, Math.floor(player.y / CONFIG.TILE)));
-  const targetX = tx * CONFIG.TILE;
-  const targetY = ty * CONFIG.TILE;
+  const x = tx * CONFIG.TILE;
+  const y = ty * CONFIG.TILE;
 
-  // Initialize on first frame
-  if (!thInited) { thX = targetX; thY = targetY; thInited = true; }
-
-  // Lerp toward the target for smoother visual motion
-  const dt = app.ticker.deltaMS / 16.67; // ~1 at 60fps
-  const k = Math.min(1, 0.12 * dt);      // smoothing factor (lower = smoother)
-  thX += (targetX - thX) * k;
-  thY += (targetY - thY) * k;
-
+  // Draw a subtle highlight directly on the current tile
   tileHighlight.clear();
-  tileHighlight.lineStyle(1, 0x222222, 0.8);
-  tileHighlight.beginFill(0xffff00, 0.12);
-  tileHighlight.drawRect(Math.round(thX), Math.round(thY), CONFIG.TILE, CONFIG.TILE);
+  tileHighlight.lineStyle(1, 0x333333, 0.1); // Subtle dark border
+  tileHighlight.beginFill(0xffffff, 0.06);   // Very subtle white fill
+  tileHighlight.drawRect(x, y, CONFIG.TILE, CONFIG.TILE);
   tileHighlight.endFill();
 }
 
@@ -403,7 +409,7 @@ function drawBridgeTargetHighlight() {
   let exists = false; for (const b of bridges.values()) { if (b.tx === tx && b.ty === ty) { exists = true; break; } }
   const valid = isWater && !exists;
   const x = tx * CONFIG.TILE; const y = ty * CONFIG.TILE;
-  bridgeTargetHighlight.lineStyle(1, valid ? 0x2e7d32 : 0xb71c1c, 0.9);
+  bridgeTargetHighlight.lineStyle(1, valid ? 0x2e7d32 : 0xb71c1c, 0.2);
   bridgeTargetHighlight.beginFill(valid ? 0x66bb6a : 0xef9a9a, 0.18);
   bridgeTargetHighlight.drawRect(x, y, CONFIG.TILE, CONFIG.TILE);
   bridgeTargetHighlight.endFill();
