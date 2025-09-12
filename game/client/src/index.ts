@@ -64,6 +64,10 @@ const props = new Map<string, SProp>();
 const propSprites = new Map<string, PIXI.Graphics>();
 const bridges = new Map<string, TileItem>();
 const walls = new Map<string, TileItem>();
+
+// Item database synced from server
+const itemDatabase = new Map<string, any>(); // Store items from server
+
 type RemoteEntity = { gfx: PIXI.Graphics; color: string; stepTime: number; stepIndex: number; lastX: number; lastY: number };
 const remotes = new Map<string, RemoteEntity>();
 
@@ -122,21 +126,23 @@ function interact() {
   socket.emit('prop:drop', item.type, Math.round(pt.x), Math.round(pt.y));
 }
 
-// ----- Crafting (client-local inventory combine) -----
-const RECIPES: Record<string, { output: PropType }> = {
-  'bush+bush': { output: 'plank' },
-  'rock+rock': { output: 'wall' },
-};
-function craftKey(a: PropType, b: PropType) { return [a, b].sort().join('+'); }
+// ----- Crafting (server-validated) -----
+let awaitingCraftResponse = false;
+
 function tryCraft() {
+  if (awaitingCraftResponse) return false; // Prevent spam
+  
   const a = inventory[0]; const b = inventory[1];
   if (!a || !b) return false;
-  const r = RECIPES[craftKey(a.type, b.type)];
-  if (!r) return false;
-  inventory[0] = null; inventory[1] = null;
-  // put result into first free slot
-  const res: InvProp = { type: r.output };
-  if (!inventory[0]) inventory[0] = res; else inventory[1] = res;
+  
+  // Send craft request to server with item IDs
+  const inputs = [
+    { item_id: a.type, quantity: 1 },
+    { item_id: b.type, quantity: 1 }
+  ];
+  
+  awaitingCraftResponse = true;
+  socket.emit('craft:request', inputs);
   return true;
 }
 
@@ -244,6 +250,40 @@ socket.on('prop:added', ({ id, type, x, y, by }) => {
 socket.on('bridge:placed', (item: TileItem) => { bridges.set(item.id, item); addBridgeSprite(item); if (item.by === selfId && inventory[activeSlot]?.type === 'plank') { inventory[activeSlot] = null; renderHUD(); } });
 socket.on('wall:placed', (item: TileItem) => { walls.set(item.id, item); addWallSprite(item); if (item.by === selfId && inventory[activeSlot]?.type === 'wall') { inventory[activeSlot] = null; renderHUD(); } });
 socket.on('wall:removed', (id: string) => { const s = wallSprites.get(id); if (s) { wallsLayer.removeChild(s); s.destroy(); } wallSprites.delete(id); walls.delete(id); });
+
+// Item database sync
+socket.on('items:sync', (items: Record<string, any>) => {
+  itemDatabase.clear();
+  for (const [id, item] of Object.entries(items)) {
+    itemDatabase.set(id, item);
+  }
+  console.log(`Synced ${itemDatabase.size} items from server`);
+});
+
+socket.on('items:update', (items: Record<string, any>) => {
+  for (const [id, item] of Object.entries(items)) {
+    itemDatabase.set(id, item);
+  }
+  console.log(`Updated ${Object.keys(items).length} items from server`);
+});
+
+// Crafting results
+socket.on('craft:result', (success: boolean, result?: { item_id: string; quantity: number }) => {
+  awaitingCraftResponse = false;
+  
+  if (success && result) {
+    console.log(`Crafting successful: ${result.quantity}x ${result.item_id}`);
+    // Clear inputs
+    inventory[0] = null;
+    inventory[1] = null;
+    // Put result into first free slot
+    const res: InvProp = { type: result.item_id as PropType }; // Cast for now
+    if (!inventory[0]) inventory[0] = res; else inventory[1] = res;
+    renderHUD();
+  } else {
+    console.log('Crafting failed - no matching recipe');
+  }
+});
 
 // Draw terrain once
 function drawTerrain() {

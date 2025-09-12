@@ -1,0 +1,35 @@
+{
+  "rock": {
+    "id": "rock",
+    "name": "Stone",
+    "category": "fauna",
+    "description": "Common mineral resource",
+    "health": 1,
+    "behavior": "static",
+    "drops": ["rock"],
+    "spawn_biome": ["plains", "mountains"],
+    "sprite": "rock"
+  },
+  "bush": {
+    "id": "bush",
+    "name": "Bush",
+    "category": "fauna", 
+    "description": "Wild vegetation that provides materials",
+    "health": 1,
+    "behavior": "static",
+    "drops": ["bush"],
+    "spawn_biome": ["plains", "forest"],
+    "sprite": "bush"
+  },
+  "flower": {
+    "id": "flower",
+    "name": "Flower",
+    "category": "fauna",
+    "description": "Colorful plant that attracts creatures",
+    "health": 1,
+    "behavior": "static", 
+    "drops": ["flower"],
+    "spawn_biome": ["plains", "meadow"],
+    "sprite": "flower"
+  }
+}

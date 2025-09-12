@@ -1,0 +1,22 @@
+{
+  "berry": {
+    "id": "berry",
+    "name": "Wild Berry",
+    "category": "food",
+    "description": "Sweet fruit found in nature",
+    "nutrition": 25,
+    "hunger_restore": 15,
+    "spoil_time": 300,
+    "sprite": "berry"
+  },
+  "mushroom": {
+    "id": "mushroom",
+    "name": "Forest Mushroom", 
+    "category": "food",
+    "description": "Edible fungus that grows in damp areas",
+    "nutrition": 35,
+    "hunger_restore": 20,
+    "spoil_time": 180,
+    "sprite": "mushroom"
+  }
+}

@@ -11,6 +11,17 @@ import {
   TileItem,
   PropType,
 } from 'shared/types';
+import { initializeDatabase, getDatabase } from './database.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Initialize database
+const dataPath = path.join(__dirname, 'data');
+initializeDatabase(dataPath);
+const db = getDatabase();
 
 const CONFIG: WorldConfig = {
   WORLD_WIDTH: 1200,
@@ -18,12 +29,6 @@ const CONFIG: WorldConfig = {
   TILE: 8,
 };
 
-
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
@@ -199,6 +204,9 @@ io.on('connection', (socket) => {
   }
   // Send world snapshot to new client
   socket.emit('world:init', buildSnapshot());
+  
+  // Send item database to new client
+  socket.emit('items:sync', db.getAllItems());
 
   // Create new player - spawn at center of world (pixel coordinates)
   const startX = Math.floor(CONFIG.WORLD_WIDTH / 2);
@@ -302,6 +310,35 @@ io.on('connection', (socket) => {
     const p: Prop = { id, x: Math.round(x), y: Math.round(y), type };
     props.set(id, p);
     io.emit('prop:added', { id, type, x: p.x, y: p.y, by: socket.id });
+  });
+
+  // Crafting system
+  socket.on('craft:request', (inputs: { item_id: string; quantity: number }[]) => {
+    console.log(`Player ${socket.id} requesting craft with inputs:`, inputs);
+    
+    // Validate inputs exist in database
+    if (!db.validateCraftingInputs(inputs)) {
+      socket.emit('craft:result', false);
+      return;
+    }
+    
+    // Find matching recipe
+    const recipe = db.findRecipeByInputs(inputs);
+    if (!recipe) {
+      console.log(`No recipe found for inputs:`, inputs);
+      socket.emit('craft:result', false);
+      return;
+    }
+    
+    console.log(`Found recipe: ${recipe.name}`);
+    
+    // For now, assume crafting always succeeds and returns first output
+    const output = recipe.outputs[0];
+    if (output) {
+      socket.emit('craft:result', true, output);
+    } else {
+      socket.emit('craft:result', false);
+    }
   });
 
 

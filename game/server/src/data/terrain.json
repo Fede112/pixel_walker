@@ -1,0 +1,22 @@
+{
+  "water": {
+    "id": "water",
+    "name": "Water",
+    "category": "terrain",
+    "description": "Deep water that blocks movement",
+    "walkable": false,
+    "buildable_on": false,
+    "durability": -1,
+    "sprite": "water_tile"
+  },
+  "grass": {
+    "id": "grass",
+    "name": "Grass",
+    "category": "terrain", 
+    "description": "Basic walkable ground",
+    "walkable": true,
+    "buildable_on": true,
+    "durability": -1,
+    "sprite": "grass_tile"
+  }
+}

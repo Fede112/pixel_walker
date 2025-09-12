@@ -1,0 +1,22 @@
+{
+  "plank": {
+    "id": "plank",
+    "name": "Wooden Plank",
+    "category": "construction",
+    "description": "Basic construction material made from bushes",
+    "strength": 50,
+    "weather_resistance": 30,
+    "build_time": 1.0,
+    "sprite": "plank"
+  },
+  "wall": {
+    "id": "wall",
+    "name": "Stone Wall",
+    "category": "construction",
+    "description": "Strong barrier made from rocks",
+    "strength": 100,
+    "weather_resistance": 90,
+    "build_time": 2.0,
+    "sprite": "wall"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "bridge": {
+    "id": "bridge",
+    "name": "Wooden Bridge",
+    "category": "transport",
+    "description": "Allows crossing water",
+    "speed_bonus": 0,
+    "capacity": -1,
+    "fuel_type": null,
+    "sprite": "bridge_tile"
+  }
+}

@@ -1,0 +1,55 @@
+{
+    "test":{
+        "id": "test",
+        "name": "Test Item",
+        "inputs": [
+            { "item_id": "flower", "quantity": 1 },
+            { "item_id": "bush", "quantity": 1 }
+        ],
+        "outputs": [
+            { "item_id": "plank", "quantity": 1 }
+        ],
+        "craft_time": 1.0,
+        "skill_required": null,
+        "tools_required": []
+    },
+  "plank_from_bush": {
+    "id": "plank_from_bush",
+    "name": "Wooden Plank",
+    "inputs": [
+      { "item_id": "bush", "quantity": 2 }
+    ],
+    "outputs": [
+      { "item_id": "plank", "quantity": 1 }
+    ],
+    "craft_time": 2.0,
+    "skill_required": null,
+    "tools_required": []
+  },
+  "wall_from_rock": {
+    "id": "wall_from_rock", 
+    "name": "Stone Wall",
+    "inputs": [
+      { "item_id": "rock", "quantity": 2 }
+    ],
+    "outputs": [
+      { "item_id": "wall", "quantity": 1 }
+    ],
+    "craft_time": 3.0,
+    "skill_required": null,
+    "tools_required": []
+  },
+  "bridge_from_plank": {
+    "id": "bridge_from_plank",
+    "name": "Wooden Bridge", 
+    "inputs": [
+      { "item_id": "plank", "quantity": 2 }
+    ],
+    "outputs": [
+      { "item_id": "bridge", "quantity": 1 }
+    ],
+    "craft_time": 4.0,
+    "skill_required": null,
+    "tools_required": []
+  }
+}

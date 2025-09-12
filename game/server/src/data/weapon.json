@@ -1,0 +1,24 @@
+{
+  "stick": {
+    "id": "stick",
+    "name": "Wooden Stick",
+    "category": "weapon",
+    "description": "Basic melee weapon",
+    "damage": 10,
+    "range": 1,
+    "durability": 25,
+    "attack_speed": 1.2,
+    "sprite": "stick"
+  },
+  "stone_spear": {
+    "id": "stone_spear",
+    "name": "Stone Spear",
+    "category": "weapon", 
+    "description": "Sharp stone tip on wooden shaft",
+    "damage": 25,
+    "range": 2,
+    "durability": 50,
+    "attack_speed": 0.8,
+    "sprite": "stone_spear"
+  }
+}
