@@ -46,6 +46,8 @@ app.use(express.static(clientDist));
 const GRID_W = Math.ceil(CONFIG.WORLD_WIDTH / CONFIG.TILE);
 const GRID_H = Math.ceil(CONFIG.WORLD_HEIGHT / CONFIG.TILE);
 const INTERACT_RADIUS = 10; // pixels
+const PLACE_RADIUS = INTERACT_RADIUS * 2; // placement distance limit (tiles)
+const PROP_PLACE_RADIUS = INTERACT_RADIUS * 4; // free prop placement distance
 const BASE_W = 12; // must mirror client character width
 const BASE_H = 18; // client character height
 const SPRITE_SCALE = 1; // keep in sync with client
@@ -240,7 +242,8 @@ io.on('connection', (socket) => {
     const tryY = Math.max(0.1, Math.min(CONFIG.WORLD_HEIGHT - 0.1, player.y + deltaY));
     if (isWalkableAt(player.x, tryY)) player.y = tryY;
     
-    io.emit('player:update', player);
+    // Broadcast to others; mover updates their own position locally
+    socket.broadcast.emit('player:update', player);
   });
 
   // ----- World actions -----
@@ -254,9 +257,14 @@ io.on('connection', (socket) => {
 
   socket.on('bridge:place', (tx: number, ty: number) => {
     if (tx < 0 || ty < 0 || tx >= GRID_W || ty >= GRID_H) return;
+    const player = players[socket.id]; if (!player) return;
     const idKey = key(tx, ty);
     if (bridgeByTile.has(idKey)) return;
     if (terrain[tIndex(tx, ty)] !== 1) return; // only on water
+    // Placement range check
+    const cx = tx * CONFIG.TILE + CONFIG.TILE / 2;
+    const cy = ty * CONFIG.TILE + CONFIG.TILE / 2;
+    if (distance2(player.x, player.y, cx, cy) > PLACE_RADIUS * PLACE_RADIUS) return;
     const id = genId('b');
     const item: TileItem = { id, tx, ty, by: socket.id };
     bridges.set(id, item); bridgeByTile.set(idKey, id);
@@ -265,9 +273,14 @@ io.on('connection', (socket) => {
 
   socket.on('wall:place', (tx: number, ty: number) => {
     if (tx < 0 || ty < 0 || tx >= GRID_W || ty >= GRID_H) return;
+    const player = players[socket.id]; if (!player) return;
     const idKey = key(tx, ty);
     if (wallByTile.has(idKey)) return;
     if (terrain[tIndex(tx, ty)] !== 0) return; // only on land
+    // Placement range check
+    const cx = tx * CONFIG.TILE + CONFIG.TILE / 2;
+    const cy = ty * CONFIG.TILE + CONFIG.TILE / 2;
+    if (distance2(player.x, player.y, cx, cy) > PLACE_RADIUS * PLACE_RADIUS) return;
     // Eject placing player if they are currently on this tile to avoid trapping
     const pl = players[socket.id];
     if (pl) {
@@ -305,7 +318,7 @@ io.on('connection', (socket) => {
     // Basic validation: near player and inside world
     const player = players[socket.id]; if (!player) return;
     if (x < 0 || y < 0 || x > CONFIG.WORLD_WIDTH || y > CONFIG.WORLD_HEIGHT) return;
-    if (distance2(player.x, player.y, x, y) > INTERACT_RADIUS * INTERACT_RADIUS * 4) return;
+    if (distance2(player.x, player.y, x, y) > PROP_PLACE_RADIUS * PROP_PLACE_RADIUS) return;
     const id = genId('p');
     const p: Prop = { id, x: Math.round(x), y: Math.round(y), type };
     props.set(id, p);
